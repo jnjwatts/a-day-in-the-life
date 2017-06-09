@@ -1,0 +1,125 @@
+# http2 demo example
+#   ansible-playbook -vv main.yaml
+# rebuild existing app only
+#   ansible-playbook -vv main.yaml --tags 'build'
+#
+# test
+#  curl -vvvk --http1.1 https://localhost:8080
+#  curl -vvvk --http2 https://localhost:8080
+#
+#  curl -vvvk --http1.1 https://http2-http2.192.168.137.2.xip.io
+#  curl -vvvk --http2 https://http2-http2.192.168.137.2.xip.io
+---
+- hosts: localhost
+  vars:
+    project_dir: "./app"
+    node_modules:
+      - express
+      - spdy
+    ocp_user: developer
+    ocp_pwd: developer
+    ocp_server: 192.168.137.2:8443
+    ocp_project: http2
+  tasks:
+    - local_action: stat path="{{project_dir}}/server.crt"
+      register: optional_file
+    
+    - block:
+        - name: ensure app directory exists
+          file: path={{project_dir}} state=directory
+         
+        - name: generate rsa key pass
+          shell: openssl genrsa -des3 -passout pass:x -out server.pass.key 2048
+          args:
+            chdir: "{{project_dir}}"
+
+        - name: generate rsa key
+          shell: openssl rsa -passin pass:x -in server.pass.key -out server.key
+          args:
+            chdir: "{{project_dir}}"
+
+        - name: remove rsa key pass
+          shell: rm -f server.pass.key
+          args:
+            chdir: "{{project_dir}}"
+
+        - name: create csr
+          shell: openssl req -new -key server.key -out server.csr -subj '/C=XX/L=Default City/O=Default Company Ltd'
+          args:
+            chdir: "{{project_dir}}"
+
+        - name: create ssl crt
+          shell: openssl x509 -req -sha256 -days 365 -in server.csr -signkey server.key -out server.crt
+          args:
+            chdir: "{{project_dir}}"
+
+      when: not optional_file.stat.exists            
+          
+    - name: ensure node modules directory exists
+      file: path="{{project_dir}}/node_modules" state=directory
+      
+    - name: npm modules install
+      npm:
+        name: "{{item}}"
+        state: present
+        path: "{{project_dir}}/node_modules"
+      with_items: "{{node_modules}}"
+      
+    - name: create server.js
+      template:
+        src: server.j2
+        dest: "{{project_dir}}/server.js"
+      
+    - name: npm create start script
+      shell: npm init -f
+      args:
+        chdir: "{{project_dir}}"
+
+    - name: npm start - fire and forget for 60 sec
+      shell: npm start
+      async: 60
+      poll: 0
+      args:
+        chdir: "{{project_dir}}"
+      tags: build
+
+    - name: check openshift log in
+      shell: oc whoami
+      ignore_errors: yes
+      register: oc_whoami      
+
+    - name: login to openshift
+      shell: "oc login -u {{ocp_user}} -p {{ocp_pwd}} --server=https://{{ocp_server}} --insecure-skip-tls-verify=true"
+      when: ocp_user not in oc_whoami.stdout
+      
+    - name: create openshift project
+      shell: "oc new-project {{ocp_project}} --display-name='HTTP2 Demo' --description='HTTP2 Demo'"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'AlreadyExists' not in command_result.stderr"
+        
+    - name: create openshift binary build
+      shell: "oc new-build --binary --name={{ocp_project}} -l app={{ocp_project}} -i centos7-s2i-nodejs"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
+        
+    - name: start openshift binary build
+      shell: "oc start-build {{ocp_project}} --from-dir=. --follow"
+      args:
+        chdir: "{{project_dir}}"        
+      register: ocp_out
+      tags: build
+      
+    - debug: var=ocp_out.stdout_lines        
+      
+    - name: create openshift application
+      shell: "oc new-app {{ocp_project}}"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"      
+      
+    - name: create openshift route
+      shell: "oc expose svc {{ocp_project}}"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'AlreadyExists' not in command_result.stderr"
+        
+    - name: patch openshift route
+      shell: oc patch route "{{ocp_project}}" -p '{"spec":{"tls":{"termination":"passthrough"}}}'

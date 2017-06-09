@@ -1,0 +1,97 @@
+# image build demo example
+#   ansible-playbook -vv main.yaml
+# rebuild existing app from source only
+#   ansible-playbook -vv main.yaml --tags 'build'
+#
+# test
+#  curl http://image-welcome.192.168.137.2.xip.io/
+#
+---
+- hosts: localhost
+  vars:
+    project_dir: "./app"
+    project_sub_dir: "./app/sh"
+    ocp_user: developer
+    ocp_pwd: developer
+    ocp_server: 192.168.137.2:8443
+    ocp_project: image
+    ocp_docker: docker-registry.192.168.137.2.xip.io
+  tasks:
+    - name: ensure app directory exists
+      file: path={{project_dir}} state=directory
+
+    - name: checkout git repo
+      git:
+        repo: git@github.com:eformat/welcome.git
+        dest: "{{project_dir}}"
+        accept_hostkey: yes
+      tags: build
+      
+    - name: build local docker image
+      shell: docker build -t welcome .
+      args:
+        chdir: "{{project_sub_dir}}"
+      tags: build
+      
+    - name: run local docker image
+      shell: docker run --name welcome -d -p 8080:8080 welcome
+      tags: build
+      
+    - name: test app
+      shell: curl localhost:8080
+      register: test_out
+      failed_when: "'Hello World' not in test_out.stdout"
+      tags: build
+      
+    - debug: var=test_out.stdout_lines
+      tags: build
+      
+    - name: stop docker container
+      shell: docker stop welcome && docker rm welcome
+      tags: build
+
+    - name: check openshift log in
+      shell: oc whoami
+      ignore_errors: yes
+      register: oc_whoami
+      tags: build
+      
+    - name: login to openshift
+      shell: "oc login -u {{ocp_user}} -p {{ocp_pwd}} --server=https://{{ocp_server}} --insecure-skip-tls-verify=true"
+      tags: build
+      when: ocp_user not in oc_whoami.stdout
+      
+    - name: create openshift project
+      shell: "oc new-project {{ocp_project}} --display-name='Image Demo' --description='Image Demo'"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'AlreadyExists' not in command_result.stderr"
+        
+    - name: tag docker image
+      shell: docker tag welcome "{{ocp_docker}}/{{ocp_project}}/welcome"
+      tags: build
+      
+    - name: docker login
+      shell: docker login -u "{{ocp_user}}" -p `oc whoami -t` "{{ocp_docker}}"
+      register: docker_login        
+      failed_when: "'Login Succeeded' not in docker_login.stdout"        
+      tags: build      
+      
+    - name: docker push image
+      shell: docker push "{{ocp_docker}}/{{ocp_project}}/welcome"
+      register: command_result
+      tags: build
+      
+    - name: create openshift application
+      shell: "oc new-app welcome"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
+      tags: build
+
+    - debug: var=command_result.stderr_lines
+      tags: build
+      
+    - name: create openshift route
+      shell: "oc expose svc welcome"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'AlreadyExists' not in command_result.stderr"      
+      tags: build

@@ -1,0 +1,47 @@
+# dockerfile build demo example
+#   ansible-playbook -vv main.yaml
+# rebuild existing app from source only
+#   ansible-playbook -vv main.yaml --tags 'build'
+#
+---
+- hosts: localhost
+  vars:
+    ocp_user: developer
+    ocp_pwd: developer
+    ocp_server: 192.168.137.2:8443
+    ocp_project: binary
+  tasks:
+    - name: check openshift log in
+      shell: oc whoami
+      ignore_errors: yes
+      register: oc_whoami
+      
+    - name: login to openshift
+      shell: "oc login -u {{ocp_user}} -p {{ocp_pwd}} --server=https://{{ocp_server}} --insecure-skip-tls-verify=true"
+      tags: build
+      when: ocp_user not in oc_whoami.stdout
+      
+    - name: create openshift project "{{ocp_project}}"
+      shell: "oc new-project {{ocp_project}} --display-name='Binary Demo' --description='Binary Demo'"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'AlreadyExists' not in command_result.stderr"
+
+    - name: create binary openshift build
+      shell: "oc new-build --strategy=source --name=petstore --binary -l app=petstore -i jboss-eap70-openshift"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
+
+    - name: build openshift image
+      shell: "oc start-build petstore --from-file=https://raw.githubusercontent.com/eformat/ps/master/deployments/ROOT.war?raw=true"
+      register: command_result        
+      failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
+
+    - name: create openshift application
+      shell: "oc new-app petstore --allow-missing-imagestream-tags"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
+      
+    - name: create openshift route
+      shell: "oc expose svc petstore"
+      register: command_result        
+      failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"

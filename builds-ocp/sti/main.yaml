@@ -1,0 +1,37 @@
+# sti build demo example
+#   ansible-playbook -vv main.yaml
+# rebuild existing app from source only
+#   ansible-playbook -vv main.yaml --tags 'build'
+#
+---
+- hosts: localhost
+  vars:
+    ocp_user: developer
+    ocp_pwd: developer
+    ocp_server: 192.168.137.2:8443
+    ocp_project: sti
+  tasks:
+    - name: check openshift log in
+      shell: oc whoami
+      ignore_errors: yes
+      register: oc_whoami
+      
+    - name: login to openshift
+      shell: "oc login -u {{ocp_user}} -p {{ocp_pwd}} --server=https://{{ocp_server}} --insecure-skip-tls-verify=true"
+      when: ocp_user not in oc_whoami.stdout
+      
+    - name: create openshift project
+      shell: "oc new-project {{ocp_project}} --display-name='STI Demo' --description='STI Demo'"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'AlreadyExists' not in command_result.stderr"
+
+    - name: create openshift application
+      shell: "oc new-app https://github.com/eformat/node-hello-world-swagger.git --strategy=source"
+      register: command_result        
+      failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
+
+    - name: create openshift route
+      shell: "oc expose svc node-hello-world-swagger"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'AlreadyExists' not in command_result.stderr"      
+      tags: build

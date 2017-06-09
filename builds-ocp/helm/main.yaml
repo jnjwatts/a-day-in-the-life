@@ -1,0 +1,67 @@
+# dockerfile build demo example
+#   ansible-playbook -vv main.yaml
+# rebuild existing app from source only
+#   ansible-playbook -vv main.yaml --tags 'build'
+#
+---
+- hosts: localhost
+  vars:
+    project_dir: "./app"    
+    ocp_user: developer
+    ocp_pwd: developer
+    ocp_server: 192.168.137.2:8443
+    ocp_project: alpine
+  tasks:
+    - name: check openshift log in
+      shell: oc whoami
+      ignore_errors: yes
+      register: oc_whoami
+      
+    - name: login to openshift
+      shell: "oc login -u {{ocp_user}} -p {{ocp_pwd}} --server=https://{{ocp_server}} --insecure-skip-tls-verify=true"
+      tags: build
+      when: ocp_user not in oc_whoami.stdout      
+      
+    - name: create openshift project "helm"
+      shell: "oc new-project helm --display-name='Helm Demo' --description='Helm Demo'"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'AlreadyExists' not in command_result.stderr"
+
+    - name: install helm
+      shell: "helm init --tiller-namespace=helm"
+      register: command_result
+
+    - name: setup tiller service account
+      shell: "oc adm policy add-role-to-user admin system:serviceaccount:helm:tiller -n helm --as=system:admin"
+      register: command_result
+      
+    - name: setup helm service account
+      shell: "oc adm policy add-role-to-user admin system:serviceaccount:helm:default -n helm --as=system:admin"
+      register: command_result
+
+    - name: allow helm to install as anyuid 
+      shell: "oc adm policy add-scc-to-user anyuid system:serviceaccount:helm:default -n helm --as=system:admin"
+      register: command_result
+
+    - name: checkout git repo
+      git:
+        repo: git@github.com:eformat/helm-alpine.git
+        dest: "{{project_dir}}"
+        accept_hostkey: yes
+
+    - name: create openshift project
+      shell: "oc new-project {{ocp_project}} --display-name='Helm Apline Demo' --description='Helm Alpine Demo'"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'AlreadyExists' not in command_result.stderr"
+      
+    - name: setup helm service account
+      shell: "oc policy add-role-to-user edit system:serviceaccount:helm:default -n {{ocp_project}}"
+      register: command_result
+
+    - name: setup helm service account
+      shell: "oc policy add-role-to-user edit system:serviceaccount:helm:tiller -n {{ocp_project}}"
+      register: command_result
+      
+    - name: install helm chart
+      shell: "helm install app --name {{ocp_project}} --namespace {{ocp_project}} --tiller-namespace=helm"
+      register: command_result
