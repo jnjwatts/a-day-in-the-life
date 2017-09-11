@@ -27,12 +27,14 @@
       failed_when: "command_result.rc != 0 and 'AlreadyExists' not in command_result.stderr"
 
     - name: create binary openshift build
+      #shell: "oc new-build --strategy=source --name=petstore --binary -l app=petstore -i jboss-eap64-openshift"
       shell: "oc new-build --strategy=source --name=petstore --binary -l app=petstore -i jboss-eap70-openshift"
       register: command_result
       failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
 
     - name: build openshift image
       shell: "oc start-build petstore --from-file=https://raw.githubusercontent.com/eformat/ps/master/deployments/ROOT.war?raw=true"
+      #shell: "oc start-build petstore --from-file=./ROOT.war"
       register: command_result        
       failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
 

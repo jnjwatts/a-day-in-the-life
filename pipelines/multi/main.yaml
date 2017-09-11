@@ -86,18 +86,12 @@
       shell: "oc create dc myapp --image={{ocp_registry}}/development/myapp:promoteQA -n testing"
       register: command_result
       failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
-      
-    - name: cancel testing deployment
-      shell: "oc rollout cancel dc myapp -n testing"
-          
+
     - name: set image pull policy testing
       shell: oc patch dc/myapp -p '{"spec":{"template":{"spec":{"containers":[{"name":"default-container","imagePullPolicy":"Always"}]}}}}' -n testing
       register: command_result
       failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
-      
-    - name: cancel deployment testing
-      shell: "oc rollout cancel dc myapp -n testing"
-      
+
     - name: create testing service
       shell: "oc expose dc myapp --port=8080 -n testing"
       register: command_result
@@ -112,18 +106,12 @@
       shell: "oc create dc myapp --image={{ocp_registry}}/development/myapp:promotePRD -n production"
       register: command_result
       failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
-      
-    - name: cancel production deployment
-      shell: "oc rollout cancel dc myapp -n production"
-          
+
     - name: set image pull policy production
       shell: oc patch dc/myapp -p '{"spec":{"template":{"spec":{"containers":[{"name":"default-container","imagePullPolicy":"Always"}]}}}}' -n production
       register: command_result
       failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
-      
-    - name: cancel deployment production
-      shell: "oc rollout cancel dc myapp -n production"
-      
+
     - name: create production service
       shell: "oc expose dc myapp --port=8080 -n production"
       register: command_result
