@@ -1,0 +1,47 @@
+#   ansible-playbook -vv main.yaml
+---
+- hosts: localhost
+  vars:
+    ocp_user: developer
+    ocp_pwd: developer
+    ocp_server: 192.168.137.2:8443
+    ocp_project: hystrixdemo
+  tasks:
+    - name: check openshift log in
+      shell: oc whoami
+      ignore_errors: yes
+      register: oc_whoami
+      
+    - name: login to openshift
+      shell: "oc login -u {{ocp_user}} -p {{ocp_pwd}} --server=https://{{ocp_server}} --insecure-skip-tls-verify=true"
+      tags: build
+      when: ocp_user not in oc_whoami.stdout
+      
+    - name: create openshift project "{{ocp_project}}"
+      shell: "oc new-project {{ocp_project}} --display-name='Hystrix Demo' --description='Hystrix Demo'"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'AlreadyExists' not in command_result.stderr"
+
+    - name: add view role to project default service account
+      shell: "oc policy add-role-to-user view --serviceaccount=default -n $(oc project -q)"
+      register: command_result
+
+    - name: create service1 app
+      shell: "oc process -f https://raw.githubusercontent.com/eformat/camel-example-hystrix/master/service1/service1-template.yaml | oc create -f-"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
+
+    - name: create service2 app
+      shell: "oc process -f https://raw.githubusercontent.com/eformat/camel-example-hystrix/master/service2/service2-template.yaml | oc create -f-"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
+
+    - name: create client app
+      shell: "oc process -f https://raw.githubusercontent.com/eformat/camel-example-hystrix/master/client/client-template.yaml | oc create -f-"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
+
+    - name: create kubeflix app
+      shell: "oc process -f https://raw.githubusercontent.com/eformat/camel-example-hystrix/master/kubeflix/kubeflix.json | oc create -f-"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
