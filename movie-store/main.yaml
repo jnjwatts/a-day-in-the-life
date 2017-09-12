@@ -8,7 +8,7 @@
     ocp_server: 192.168.137.2:8443
     ocp_domain: 192.168.137.2.xip.io
     ocp_registry: 172.30.1.1:5000
-    api_key: NGQ0N2IxNDA1YTg2MDRiNTAxMGM1YWM3Yjc4ZGRkOWE=
+    api_key: fill-me-in
   tasks:
     - name: ensure app directory exists
       file: path={{project_dir}} state=directory
