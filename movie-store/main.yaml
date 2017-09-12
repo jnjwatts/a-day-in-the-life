@@ -1,0 +1,61 @@
+#   ansible-playbook -vv main.yaml
+---
+- hosts: localhost
+  vars:
+    project_dir: "./app"
+    ocp_user: developer
+    ocp_pwd: developer
+    ocp_server: 192.168.137.2:8443
+    ocp_domain: 192.168.137.2.xip.io
+    ocp_registry: 172.30.1.1:5000
+    api_key: NGQ0N2IxNDA1YTg2MDRiNTAxMGM1YWM3Yjc4ZGRkOWE=
+  tasks:
+    - name: ensure app directory exists
+      file: path={{project_dir}} state=directory
+
+    - name: checkout git repo
+      git:
+        repo: git@github.com:eformat/popular-movie-store.git
+        dest: "{{project_dir}}"
+        accept_hostkey: yes
+      tags: build
+
+    - name: check openshift log in
+      shell: oc whoami
+      ignore_errors: yes
+      register: oc_whoami
+      
+    - name: login to openshift
+      shell: "oc login -u {{ocp_user}} -p {{ocp_pwd}} --server=https://{{ocp_server}} --insecure-skip-tls-verify=true"
+      tags: build
+      when: ocp_user not in oc_whoami.stdout
+      
+    - name: create openshift project moviestore
+      shell: "oc new-project moviestore --display-name='Moviestore' --description='Moviestore'"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'AlreadyExists' not in command_result.stderr"
+
+    - name: add service account
+      shell: "oc create serviceaccount 'popular-movie-store'"
+      register: command_result
+      failed_when: "command_result.rc != 0 and 'AlreadyExists' not in command_result.stderr"
+
+    - name: add role to default user
+      shell: "oc policy add-role-to-user view system:serviceaccount:$(oc project -q):default -n $(oc project -q)"
+      register: command_result
+
+    - name: add role to popular-movie-store user
+      shell: "oc policy add-role-to-user view system:serviceaccount:$(oc project -q):popular-movie-store -n $(oc project -q)"
+      register: command_result
+
+    - name: create app
+      shell: "./mvnw -DapiKey={{api_key}} clean fabric8:deploy"
+      args:
+        chdir: "{{project_dir}}"
+      tags: build
+
+    - name: create canary app
+      shell: "./mvnw -Pcanary -DapiKey={{api_key}} clean fabric8:deploy"
+      args:
+        chdir: "{{project_dir}}"
+      tags: build

@@ -1,7 +1,8 @@
 *.retry
 http2/app/
 builds-ocp/app/
-helm/app
+helm/app/
+movie-store/app/
 *~
 ROOT.war
 .idea
