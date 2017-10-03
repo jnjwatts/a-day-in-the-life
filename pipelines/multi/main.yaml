@@ -10,7 +10,7 @@
     ocp_pwd: developer
     ocp_server: 192.168.137.2:8443
     ocp_domain: 192.168.137.2.xip.io
-    ocp_registry: 172.30.1.1:5000
+    ocp_registry: docker-registry.default.svc:5000
   tasks:
     - name: check openshift log in
       shell: oc whoami
