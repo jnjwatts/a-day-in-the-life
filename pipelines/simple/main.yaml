@@ -10,6 +10,9 @@
     ocp_pwd: developer
     ocp_server: 192.168.137.2:8443
     ocp_project: samplepipeline
+    ocp_app: jenkins-pipeline-example
+    ocp_dname: "Pipeline Sample"
+    ocp_desc: "Pipeline Sample"
   tasks:
     - name: check openshift log in
       shell: oc whoami
@@ -27,7 +30,8 @@
       failed_when: "command_result.rc != 0 and 'AlreadyExists' not in command_result.stderr"
 
     - name: create openshift application
-      shell: "oc new-app jenkins-pipeline-example"
+      #shell: "oc new-app jenkins-pipeline-example"
+      shell: "oc new-app {{ocp_app}}"
       register: command_result
       failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
       
