@@ -98,7 +98,8 @@
       failed_when: "command_result.rc != 0 and 'AlreadyExists' not in command_result.stderr"
         
     - name: create openshift binary build
-      shell: "oc new-build --binary --name={{ocp_project}} -l app={{ocp_project}} -i centos7-s2i-nodejs"
+      #shell: "oc new-build --binary --name={{ocp_project}} -l app={{ocp_project}} -i centos7-s2i-nodejs"
+      shell: "oc new-build --binary --name={{ocp_project}} -l app={{ocp_project}} -i nodejs"
       register: command_result
       failed_when: "command_result.rc != 0 and 'already exists' not in command_result.stderr"
         
