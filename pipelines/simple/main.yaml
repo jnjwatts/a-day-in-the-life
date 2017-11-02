@@ -14,6 +14,11 @@
     ocp_dname: "Pipeline Sample"
     ocp_desc: "Pipeline Sample"
   tasks:
+    - name: touch a file in tmp
+      shell: touch /tmp/run_from_cloudforms
+      ignore_errors: yes
+      register: touch_tmp
+      
     - name: check openshift log in
       shell: oc whoami
       ignore_errors: yes
